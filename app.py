@@ -1,106 +1,87 @@
 import streamlit as st
 import fitz  # PyMuPDF
+import nltk
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from nltk.tokenize import RegexpTokenizer
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-import nltk
+from nltk.tokenize import RegexpTokenizer
 
-# Download only required NLTK components
+# Download only needed NLTK resources
 nltk.download('stopwords')
 nltk.download('wordnet')
 
-# --- Text Preprocessing ---
+# ------------------ Preprocessing ------------------
+def read_pdf(file):
+    text = ""
+    with fitz.open(stream=file.read(), filetype="pdf") as doc:
+        for page in doc:
+            text += page.get_text()
+    return text
+
 def preprocess_text(text):
-    try:
-        text = text.lower()
-        text = re.sub(r'[^a-z\s]', '', text)
-        tokenizer = RegexpTokenizer(r'\w+')
-        tokens = tokenizer.tokenize(text)
-        stop_words = set(stopwords.words("english"))
-        tokens = [w for w in tokens if w not in stop_words]
-        lemmatizer = WordNetLemmatizer()
-        lemmatized = [lemmatizer.lemmatize(w) for w in tokens]
-        return " ".join(lemmatized)
-    except Exception as e:
-        st.error(f"Text processing error: {str(e)}")
-        return ""
+    text = text.lower()
+    text = re.sub(r'[^a-z\s]', '', text)
+    tokenizer = RegexpTokenizer(r'\w+')
+    tokens = tokenizer.tokenize(text)
+    stop_words = set(stopwords.words("english"))
+    tokens = [w for w in tokens if w not in stop_words]
+    lemmatizer = WordNetLemmatizer()
+    lemmatized = [lemmatizer.lemmatize(w) for w in tokens]
+    return " ".join(lemmatized)
 
-# --- Extract Text from Resume PDF ---
-def extract_text_from_pdf(pdf_file):
-    try:
-        with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
-            text = ""
-            for page in doc:
-                text += page.get_text()
-        return text
-    except Exception as e:
-        st.error(f"Error reading PDF: {str(e)}")
-        return ""
-
-# --- Match Score Calculation ---
 def calculate_similarity(resume_text, job_desc):
-    try:
-        if not resume_text.strip() or not job_desc.strip():
-            return 0.0
-        tfidf = TfidfVectorizer()
-        tfidf_matrix = tfidf.fit_transform([resume_text, job_desc])
-        return round(cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0] * 100, 2)
-    except Exception as e:
-        st.error(f"Similarity calculation error: {str(e)}")
-        return 0.0
+    tfidf = TfidfVectorizer()
+    tfidf_matrix = tfidf.fit_transform([resume_text, job_desc])
+    return round(cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0] * 100, 2)
 
-# --- Streamlit Layout ---
+# ------------------ Streamlit App ------------------
 st.set_page_config(page_title="Smart Resume Ranker", layout="wide")
 
-# Top Title and Developer Credits
-st.markdown("""
-    <h1 style='text-align: center; color: #4A90E2;'>Smart Resume Ranker</h1>
-    <h4 style='text-align: center; color: #555;'>Built with ❤️ by <strong>Vikas Jaipal</strong> & <strong>Sudha Koushal</strong></h4>
-    <hr>
-""", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: white; background-color: #2a5298; padding: 1rem; border-radius: 10px;'>🧠 Smart Resume Ranker & Analysis</h1>", unsafe_allow_html=True)
 
-# Layout: Two columns
-col1, col2 = st.columns(2)
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3178/3178374.png", width=80)
+    st.markdown("## 🔍 Navigation")
+    st.markdown("✅ Upload Resume(s)")
+    st.markdown("✅ Enter Job Description")
+    st.markdown("✅ View Matching Results")
+    st.markdown("✅ Insights & Graphs")
+    st.markdown("---")
+    st.markdown("### 👨‍💻 Developed by:")
+    st.markdown("**Vikas Jaipal (22EEBIT009)**")
+    st.markdown("**Sudha Koushal (22EEBIT006)**")
 
-with col1:
-    st.header("📄 Upload Resume")
-    resume_file = st.file_uploader("Upload PDF Resume", type=["pdf"])
+st.subheader("Welcome to Smart Resume Ranker & Analysis 🚀")
+st.markdown("Upload resumes, enter a job description, and get instant AI-based matching and analysis!")
 
-with col2:
-    st.header("📝 Job Description")
-    job_title = st.text_input("Job Title")
-    job_description = st.text_area("Paste the job description here", height=200)
+st.markdown("### 📂 Step 1: Upload Resume PDFs")
+uploaded_files = st.file_uploader("Upload one or more resumes", type="pdf", accept_multiple_files=True)
 
-# Analyze Button
-if st.button("🚀 Analyze Match"):
-    if resume_file is None or job_description.strip() == "":
-        st.warning("⚠️ Please upload a resume and provide the job description.")
+st.markdown("### 📝 Step 2: Enter Job Description")
+job_desc = st.text_area("Paste the job description here", height=200)
+
+if st.button("🔍 Analyze & Match"):
+    if not uploaded_files or not job_desc.strip():
+        st.warning("Please upload at least one resume and enter a job description.")
     else:
-        with st.spinner("Processing resume..."):
-            resume_text = extract_text_from_pdf(resume_file)
-            preprocessed_resume = preprocess_text(resume_text)
-            preprocessed_jd = preprocess_text(job_description)
-            match_score = calculate_similarity(preprocessed_resume, preprocessed_jd)
+        st.success("Processing... Please wait ⏳")
+        job_clean = preprocess_text(job_desc)
 
-        # Match Score
-        st.markdown("---")
-        st.subheader("📊 Match Score:")
-        st.markdown(f"<h2 style='text-align: center; color: green;'>{match_score}%</h2>", unsafe_allow_html=True)
+        for file in uploaded_files:
+            text = read_pdf(file)
+            resume_clean = preprocess_text(text)
+            score = calculate_similarity(resume_clean, job_clean)
 
-        if match_score >= 70:
-            st.success("✅ Excellent Match: Your resume aligns well with the job!")
-        elif match_score >= 40:
-            st.info("⚠️ Moderate Match: Try improving your resume.")
-        else:
-            st.error("❌ Low Match: Your resume doesn't align well. Try tailoring it.")
+            st.markdown(f"### 📄 {file.name}")
+            st.write(f"**Match Score:** `{score}%`")
+            if score >= 70:
+                st.success("✅ Excellent match!")
+            elif score >= 50:
+                st.info("⚠️ Moderate match")
+            else:
+                st.warning("❌ Low match")
 
-        # Expanders
-        st.markdown("---")
-        with st.expander("🔍 View Extracted Resume Text"):
-            st.text(resume_text)
-
-        with st.expander("📄 View Job Description"):
-            st.text(job_description)
+st.markdown("---")
+st.markdown("<p style='text-align: center; font-size: 14px;'>Project developed by <b>Vikas Jaipal</b> & <b>Sudha Koushal</b> — 3rd Year IT | Engineering College Bikaner</p>", unsafe_allow_html=True)
